@@ -1,3 +1,10 @@
+//go:build !libzt
+
+// This file is the fallback used in ordinary builds. The real userspace engine
+// lives in libzt_cgo.go and is compiled only with `-tags libzt` (which also
+// links against the libzt C library). Keeping them build-tag-separated means
+// the default binary needs no C toolchain and stays tiny.
+
 package zt
 
 import (

@@ -10,11 +10,16 @@ import (
 	"time"
 )
 
+// runner executes a zerotier-cli invocation and returns its combined output.
+// It is a field on hostBackend so tests can substitute a fake daemon.
+type runner func(ctx context.Context, args ...string) (string, error)
+
 // hostBackend drives a system-installed zerotier-one daemon through the
 // zerotier-cli command-line tool. It runs a background poller that keeps the
 // cached Status fresh and locates the ZimaOS node once the network is joined.
 type hostBackend struct {
 	pinnedHost string
+	run        runner
 
 	mu     sync.Mutex
 	status Status
@@ -27,6 +32,7 @@ type hostBackend struct {
 func newHostBackend(pinnedHost string) *hostBackend {
 	return &hostBackend{
 		pinnedHost: pinnedHost,
+		run:        execCLI,
 		status:     Status{State: StateStopped},
 	}
 }
@@ -51,7 +57,7 @@ func (h *hostBackend) Join(ctx context.Context, networkID string) error {
 	h.cancel = cancel
 	h.mu.Unlock()
 
-	if out, err := runCLI(ctx, "join", networkID); err != nil {
+	if out, err := h.run(ctx, "join", networkID); err != nil {
 		h.setError(fmt.Sprintf("zerotier-cli join failed: %v: %s", err, out))
 		return err
 	}
@@ -74,7 +80,7 @@ func (h *hostBackend) Leave(ctx context.Context) error {
 	if netID == "" {
 		return nil
 	}
-	_, err := runCLI(ctx, "leave", netID)
+	_, err := h.run(ctx, "leave", netID)
 	return err
 }
 
@@ -104,56 +110,63 @@ func (h *hostBackend) pollLoop(ctx context.Context, networkID string) {
 	defer ticker.Stop()
 
 	var discovered bool
-	poll := func() {
-		net, err := h.listNetwork(ctx, networkID)
-		if err != nil {
-			h.setError(fmt.Sprintf("cannot query zerotier: %v", err))
-			return
-		}
-		if net == nil {
-			h.setState(StateJoining, networkID, "", false, "waiting for network membership")
-			return
-		}
-
-		authorized := net.Status == "OK"
-		cidr := firstIPv4(net.AssignedAddresses)
-		ip := ipOnly(cidr)
-
-		switch {
-		case !authorized:
-			// The most common first-run case: ZimaOS has not yet approved
-			// this device on its "Connect" controller.
-			msg := "waiting for authorization — approve this device in ZimaOS (Network → Remote Login)"
-			if net.Status == "ACCESS_DENIED" {
-				msg = "access denied by ZimaOS — approve this device in ZimaOS settings"
-			}
-			h.setState(StateJoining, networkID, ip, false, msg)
-			discovered = false
-		case cidr == "":
-			h.setState(StateJoining, networkID, "", true, "authorized, awaiting IP assignment")
-		case !discovered:
-			h.setState(StateDiscover, networkID, ip, true, "locating your ZimaOS server")
-			if url := h.locateZima(ctx, cidr); url != "" {
-				h.setConnected(networkID, ip, url)
-				discovered = true
-			}
-		default:
-			// Already connected; keep the cached URL, just refresh liveness.
-			h.mu.Lock()
-			h.status.AssignedIP = ip
-			h.status.Authorized = true
-			h.mu.Unlock()
-		}
-	}
-
-	poll()
+	discovered = h.pollOnce(ctx, networkID, discovered)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			poll()
+			discovered = h.pollOnce(ctx, networkID, discovered)
 		}
+	}
+}
+
+// pollOnce performs a single refresh of the membership state and updates the
+// cached Status. It takes and returns whether the ZimaOS server has already
+// been located, so the caller can carry that across ticks. Split out from
+// pollLoop so the state machine can be unit-tested without timers.
+func (h *hostBackend) pollOnce(ctx context.Context, networkID string, discovered bool) bool {
+	net, err := h.listNetwork(ctx, networkID)
+	if err != nil {
+		h.setError(fmt.Sprintf("cannot query zerotier: %v", err))
+		return discovered
+	}
+	if net == nil {
+		h.setState(StateJoining, networkID, "", false, "waiting for network membership")
+		return discovered
+	}
+
+	authorized := net.Status == "OK"
+	cidr := firstIPv4(net.AssignedAddresses)
+	ip := ipOnly(cidr)
+
+	switch {
+	case !authorized:
+		// The most common first-run case: ZimaOS has not yet approved this
+		// device on its "Connect" controller.
+		msg := "waiting for authorization — approve this device in ZimaOS (Network → Remote Login)"
+		if net.Status == "ACCESS_DENIED" {
+			msg = "access denied by ZimaOS — approve this device in ZimaOS settings"
+		}
+		h.setState(StateJoining, networkID, ip, false, msg)
+		return false
+	case cidr == "":
+		h.setState(StateJoining, networkID, "", true, "authorized, awaiting IP assignment")
+		return discovered
+	case !discovered:
+		h.setState(StateDiscover, networkID, ip, true, "locating your ZimaOS server")
+		if url := h.locateZima(ctx, cidr); url != "" {
+			h.setConnected(networkID, ip, url)
+			return true
+		}
+		return false
+	default:
+		// Already connected; keep the cached URL, just refresh liveness.
+		h.mu.Lock()
+		h.status.AssignedIP = ip
+		h.status.Authorized = true
+		h.mu.Unlock()
+		return true
 	}
 }
 
@@ -177,7 +190,7 @@ type cliNetwork struct {
 }
 
 func (h *hostBackend) listNetwork(ctx context.Context, networkID string) (*cliNetwork, error) {
-	out, err := runCLI(ctx, "-j", "listnetworks")
+	out, err := h.run(ctx, "-j", "listnetworks")
 	if err != nil {
 		return nil, fmt.Errorf("%v: %s", err, out)
 	}
@@ -193,7 +206,8 @@ func (h *hostBackend) listNetwork(ctx context.Context, networkID string) (*cliNe
 	return nil, nil
 }
 
-func runCLI(ctx context.Context, args ...string) (string, error) {
+// execCLI is the production runner: it shells out to the real zerotier-cli.
+func execCLI(ctx context.Context, args ...string) (string, error) {
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, "zerotier-cli", args...)

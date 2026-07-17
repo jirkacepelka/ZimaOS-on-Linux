@@ -48,8 +48,9 @@ service — no Electron, no embedded browser, near-zero CPU when connected.
 | `internal/config` | Persist the Remote ID + settings (`~/.config/zima-connect`) |
 | `internal/zt` | ZeroTier engine behind a swappable `Backend` interface |
 | `internal/zt/host.go` | Backend driving the system `zerotier-one` daemon (works today) |
-| `internal/zt/libzt.go` | Embedded userspace backend for the sandboxed Flatpak (scaffold) |
+| `internal/zt/libzt_cgo.go` | Embedded userspace backend via libzt, built with `-tags libzt` |
 | `internal/zt/discover.go` | Locates the ZimaOS server on the ZeroTier subnet |
+| `internal/proxy` | Local TCP proxy bridging the browser to ZimaOS over userspace ZeroTier |
 | `internal/autostart` | Login autostart via XDG `~/.config/autostart` |
 | `internal/server` | Localhost web UI + JSON API |
 | `packaging/flatpak` | Flatpak manifest, AppStream metainfo, desktop entry, icon |
@@ -88,13 +89,22 @@ This is what the current build does out of the box.
 ### Path B — embedded libzt (required for Flathub → Bazaar)
 A **Flatpak sandbox cannot run the host daemon**, so the store build embeds
 **[libzt](https://github.com/zerotier/libzt)** — ZeroTier in *userspace*, no root,
-no TUN. A tiny local TCP proxy then bridges the browser to ZimaOS over the
-userspace stack. This is the backend that lets the app ship on Flathub and
-therefore show up in Bazaar. It's scaffolded in `internal/zt/libzt.go` with the
-implementation plan; wiring the cgo bindings is the remaining milestone.
+no TUN. The local TCP proxy in `internal/proxy` (fully unit-tested) bridges the
+browser to ZimaOS over the userspace stack. This is the backend that lets the
+app ship on Flathub and therefore show up in Bazaar.
 
-The `Backend` interface means the UI, config, autostart, and web server are all
-already done and shared across both paths.
+It's implemented in `internal/zt/libzt_cgo.go` behind the `libzt` build tag:
+
+```sh
+go build -tags libzt ./...   # requires the libzt C library + headers installed
+```
+
+The default build omits it (no C toolchain needed, tiny binary). The remaining
+milestone is compile-verifying the cgo bindings against a vendored libzt and
+bundling libzt in the Flatpak manifest.
+
+The `Backend` interface means the UI, config, autostart, web server, and proxy
+are all already done and shared across both paths.
 
 ---
 
@@ -135,10 +145,13 @@ The app ID `io.github.jirkacepelka.ZimaConnect` already follows Flathub's
 - ✅ Localhost UI, Remote ID entry, live status, auto-redirect to ZimaOS
 - ✅ Login autostart (XDG)
 - ✅ Host `zerotier-one` backend with ZimaOS auto-discovery
-- ✅ Flatpak manifest, AppStream metainfo, desktop entry, icon
-- 🚧 Embedded libzt backend (needed for the actual Flathub/Bazaar release)
+- ✅ Userspace libzt backend (`-tags libzt`) + tested local TCP proxy
+- ✅ Flatpak manifest, AppStream metainfo, desktop entry, icon, screenshot
+- ✅ CI: build, vet, race tests, metadata validation
+- 🚧 Compile-verify the libzt cgo bindings against a vendored libzt
+- 🚧 Bundle libzt in the Flatpak manifest
 - 🚧 Background-portal autostart inside the Flatpak sandbox
-- 🚧 Screenshots for the store listing
+- 🚧 ZimaOS auto-discovery over the userspace stack (currently pin the address)
 
 ## License
 
