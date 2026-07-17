@@ -51,7 +51,7 @@ service — no Electron, no embedded browser, near-zero CPU when connected.
 | `internal/zt/libzt_cgo.go` | Embedded userspace backend via libzt, built with `-tags libzt` |
 | `internal/zt/discover.go` | Locates the ZimaOS server on the ZeroTier subnet |
 | `internal/proxy` | Local TCP proxy bridging the browser to ZimaOS over userspace ZeroTier |
-| `internal/autostart` | Login autostart via XDG `~/.config/autostart` |
+| `internal/autostart` | Login autostart: XDG file, or the Background portal on Flatpak |
 | `internal/server` | Localhost web UI + JSON API |
 | `packaging/flatpak` | Flatpak manifest, AppStream metainfo, desktop entry, icon |
 
@@ -157,10 +157,11 @@ The app ID `io.github.jirkacepelka.ZimaConnect` already follows Flathub's
 - ✅ Userspace libzt backend (`-tags libzt`), compile/link/run-verified against libzt
 - ✅ Local TCP proxy bridging the browser over userspace ZeroTier (unit-tested)
 - ✅ Flatpak manifest builds+links libzt from source; AppStream metainfo, icon, screenshot
+- ✅ Login autostart: XDG file on normal installs, Background portal inside Flatpak
+- ✅ ZimaOS auto-discovery shared by both backends (host routes / userspace dialer)
 - ✅ CI: build, vet, race tests, metadata validation
-- 🚧 Run the Flatpak manifest through flatpak-builder end-to-end
-- 🚧 Background-portal autostart inside the Flatpak sandbox
-- 🚧 ZimaOS auto-discovery over the userspace stack (currently pin the address)
+- 🚧 Run the Flatpak manifest through flatpak-builder end-to-end (needs a flatpak host)
+- 🚧 Test the full connect flow against a live ZimaOS + ZeroTier network
 
 ## License
 

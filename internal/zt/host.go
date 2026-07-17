@@ -176,7 +176,7 @@ func (h *hostBackend) locateZima(ctx context.Context, assignedCIDR string) strin
 	if h.pinnedHost != "" {
 		return normalizeZimaURL(h.pinnedHost)
 	}
-	return discoverZima(ctx, assignedCIDR)
+	return discoverZima(ctx, assignedCIDR, netDialer{})
 }
 
 // ---- zerotier-cli plumbing -------------------------------------------------

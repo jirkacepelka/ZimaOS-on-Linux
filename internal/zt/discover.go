@@ -5,9 +5,12 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jirkacepelka/zimaos-on-linux/internal/proxy"
 )
 
 // firstIPv4 returns the first IPv4 address (in CIDR form, e.g. "10.147.20.5/24")
@@ -50,14 +53,42 @@ func normalizeZimaURL(host string) string {
 	return "http://" + host
 }
 
+// urlToHostPort extracts a dialable "host:port" from a URL, filling in the
+// default port for the scheme. Used to turn a discovered ZimaOS URL into a
+// proxy target.
+func urlToHostPort(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	if u.Port() != "" {
+		return u.Host
+	}
+	if u.Scheme == "https" {
+		return u.Hostname() + ":443"
+	}
+	return u.Hostname() + ":80"
+}
+
+// netDialer is the default proxy.Dialer used by the host backend: it dials over
+// the real OS network stack (where the ZeroTier route already exists).
+type netDialer struct{}
+
+func (netDialer) Dial(ctx context.Context, network, address string) (net.Conn, error) {
+	var d net.Dialer
+	return d.DialContext(ctx, network, address)
+}
+
 // discoverZima scans the ZeroTier subnet described by assignedCIDR looking for
-// the ZimaOS server. It probes every host in the subnet concurrently and
-// returns the URL of the best match: a host that identifies as ZimaOS/CasaOS is
-// preferred, otherwise the first host answering on the web port.
+// the ZimaOS server, dialing through the supplied Dialer. The host backend
+// passes a netDialer (real routes); the libzt backend passes a dialer that
+// tunnels through the userspace stack — so exactly the same scan works for both.
 //
-// This is intentionally best-effort. If the user pins ZimaHost in the config we
-// never get here.
-func discoverZima(ctx context.Context, assignedCIDR string) string {
+// It probes every host in the subnet concurrently and returns the URL of the
+// best match: a host that identifies as ZimaOS/CasaOS is preferred, otherwise
+// the first host answering on the web port. Best-effort; if the user pins a host
+// we never get here.
+func discoverZima(ctx context.Context, assignedCIDR string, dial proxy.Dialer) string {
 	self, ipNet, err := net.ParseCIDR(assignedCIDR)
 	if err != nil || self.To4() == nil {
 		return ""
@@ -90,7 +121,7 @@ func discoverZima(ctx context.Context, assignedCIDR string) string {
 			case <-scanCtx.Done():
 				return
 			}
-			if url, strong, ok := probeZima(scanCtx, ip); ok {
+			if url, strong, ok := probeZima(scanCtx, ip, dial); ok {
 				results <- result{url: url, strong: strong}
 			}
 		}(host)
@@ -112,10 +143,10 @@ func discoverZima(ctx context.Context, assignedCIDR string) string {
 
 // probeZima checks whether ip serves a ZimaOS-like web UI. It returns the URL,
 // whether it strongly matched a signature, and whether it answered at all.
-func probeZima(ctx context.Context, ip string) (url string, strong bool, ok bool) {
+func probeZima(ctx context.Context, ip string, dial proxy.Dialer) (foundURL string, strong bool, ok bool) {
 	for _, scheme := range []string{"http", "https"} {
 		u := scheme + "://" + ip
-		body, headers, ok2 := httpPeek(ctx, u)
+		body, headers, ok2 := httpPeek(ctx, u, dial)
 		if !ok2 {
 			continue
 		}
@@ -129,24 +160,23 @@ func probeZima(ctx context.Context, ip string) (url string, strong bool, ok bool
 	return "", false, false
 }
 
-// httpPeek fetches the first chunk of a URL with a tight timeout. It never
-// follows into long downloads and tolerates self-signed TLS (ZimaOS local certs).
-func httpPeek(ctx context.Context, url string) (body, headers string, ok bool) {
+// httpPeek fetches the first chunk of a URL through dial with a tight timeout.
+// It tolerates self-signed TLS (ZimaOS local certs); it is only sniffing for
+// identity here, not transferring anything sensitive.
+func httpPeek(ctx context.Context, rawURL string, dial proxy.Dialer) (body, headers string, ok bool) {
 	cctx, cancel := context.WithTimeout(ctx, 2500*time.Millisecond)
 	defer cancel()
 
 	client := &http.Client{
 		Timeout: 2500 * time.Millisecond,
 		Transport: &http.Transport{
-			// ZimaOS local HTTPS uses a self-signed cert; we are only sniffing
-			// for identity here, not transferring sensitive data.
 			TLSClientConfig: insecureTLS(),
-			DialContext:     (&net.Dialer{Timeout: 1500 * time.Millisecond}).DialContext,
+			DialContext:     dial.Dial,
 		},
 		// Do not follow redirects; the landing page is enough to identify.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	req, err := http.NewRequestWithContext(cctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return "", "", false
 	}

@@ -171,14 +171,15 @@ func (l *libztBackend) monitor(ctx context.Context, id uint64, networkID string)
 			continue
 		}
 
-		target := l.resolveTarget()
+		l.setState(StateDiscover, networkID, assigned, true, "locating your ZimaOS server")
+		target := l.resolveTarget(ctx, assigned)
 		if target == "" {
-			l.setError("set the ZimaOS address under Advanced — auto-discovery is not " +
-				"available on the userspace engine yet")
+			l.setState(StateDiscover, networkID, assigned, true,
+				"could not find ZimaOS automatically — set its address under Advanced")
 			continue
 		}
 
-		p := proxy.New(&libztDialer{}, target)
+		p := proxy.New(libztDialer{}, target)
 		local, err := p.ListenAndServe(ctx)
 		if err != nil {
 			l.setError("could not start local proxy: " + err.Error())
@@ -189,19 +190,23 @@ func (l *libztBackend) monitor(ctx context.Context, id uint64, networkID string)
 	}
 }
 
-// resolveTarget returns the ZimaOS "host:port" to tunnel to. The userspace
-// engine currently relies on a pinned host (subnet scanning would have to go
-// through libzt sockets); default to port 80 when none is given.
-func (l *libztBackend) resolveTarget() string {
-	h := strings.TrimSpace(l.pinnedHost)
-	if h == "" {
-		return ""
+// resolveTarget returns the ZimaOS "host:port" to tunnel to. A pinned host wins;
+// otherwise it scans the ZeroTier subnet over the userspace stack, reusing the
+// shared discovery code with a libzt-backed dialer. The subnet mask is not
+// exposed by libzt's simple API, so we assume a /24 around the assigned address
+// (ZeroTier's common default); the Advanced pin covers anything unusual.
+func (l *libztBackend) resolveTarget(ctx context.Context, assignedIP string) string {
+	if h := strings.TrimSpace(l.pinnedHost); h != "" {
+		h = strings.TrimPrefix(strings.TrimPrefix(h, "http://"), "https://")
+		if !strings.Contains(h, ":") {
+			h += ":80"
+		}
+		return h
 	}
-	h = strings.TrimPrefix(strings.TrimPrefix(h, "http://"), "https://")
-	if !strings.Contains(h, ":") {
-		h += ":80"
+	if u := discoverZima(ctx, assignedIP+"/24", libztDialer{}); u != "" {
+		return urlToHostPort(u)
 	}
-	return h
+	return ""
 }
 
 // assignedIPv4 returns this node's IPv4 address on the network, or "".
