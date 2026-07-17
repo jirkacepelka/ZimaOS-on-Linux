@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Zima Connect
+GenericName=ZimaOS Remote Connector
+Comment=Securely reach your ZimaOS server over ZeroTier
+Exec=zima-connect
+Icon=io.github.jirkacepelka.ZimaConnect
+Terminal=false
+Categories=Network;RemoteAccess;
+Keywords=ZimaOS;ZeroTier;NAS;Remote;VPN;
