@@ -47,6 +47,16 @@ function render(s) {
 
   backendName.textContent = s.backend ? "engine: " + s.backend : "";
 
+  // Show the ZeroTier-assigned address once we have one, echoing the ZimaOS
+  // client's "Current IP" line.
+  const connIp = el("conn-ip");
+  if (s.assigned_ip) {
+    el("assigned-ip").textContent = s.assigned_ip;
+    connIp.hidden = false;
+  } else {
+    connIp.hidden = true;
+  }
+
   // Prefill the form from saved config the first time only.
   if (!render.prefilled) {
     if (s.configured_network_id) el("network-id").value = s.configured_network_id;
