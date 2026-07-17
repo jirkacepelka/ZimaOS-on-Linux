@@ -1,0 +1,60 @@
+# Flatpak manifest for Zima Connect.
+#
+# This builds the app for Flathub, which is what makes it appear in Bazaar and
+# every other Flathub frontend. The build is fully offline: Zima Connect has
+# ZERO third-party Go dependencies (standard library only), so no module
+# vendoring or network fetching is needed at build time — a big win for passing
+# Flathub review.
+#
+# Build & test locally:
+#   flatpak install flathub org.freedesktop.Platform//24.08 \
+#       org.freedesktop.Sdk//24.08 org.freedesktop.Sdk.Extension.golang//24.08
+#   flatpak-builder --user --install --force-clean build-dir \
+#       packaging/flatpak/io.github.jirkacepelka.ZimaConnect.yml
+#   flatpak run io.github.jirkacepelka.ZimaConnect
+#
+# NOTE ON ZEROTIER: the sandbox cannot run the host zerotier-one daemon. Full
+# Flathub distribution therefore requires the embedded libzt backend
+# (internal/zt/libzt.go). Until that is compiled in, this Flatpak runs the UI
+# and reports that no engine is available. See README "Distribution paths".
+
+app-id: io.github.jirkacepelka.ZimaConnect
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.golang
+command: zima-connect
+
+finish-args:
+  # ZeroTier (userspace/libzt) and reaching the ZimaOS web UI both need the net.
+  - --share=network
+  # Keep running headless as a background service.
+  - --talk-name=org.freedesktop.portal.Background
+  # Opening the ZimaOS login in the user's browser goes through the OpenURI portal.
+
+build-options:
+  append-path: /usr/lib/sdk/golang/bin
+  env:
+    GOPROXY: 'off'
+    GO111MODULE: 'on'
+    GOFLAGS: '-mod=mod'
+
+modules:
+  - name: zima-connect
+    buildsystem: simple
+    build-commands:
+      - go build -trimpath -ldflags="-s -w" -o /app/bin/zima-connect ./cmd/zima-connect
+      - install -Dm644 packaging/flatpak/io.github.jirkacepelka.ZimaConnect.desktop
+          /app/share/applications/io.github.jirkacepelka.ZimaConnect.desktop
+      - install -Dm644 packaging/flatpak/io.github.jirkacepelka.ZimaConnect.metainfo.xml
+          /app/share/metainfo/io.github.jirkacepelka.ZimaConnect.metainfo.xml
+      - install -Dm644 packaging/flatpak/icons/io.github.jirkacepelka.ZimaConnect.svg
+          /app/share/icons/hicolor/scalable/apps/io.github.jirkacepelka.ZimaConnect.svg
+    sources:
+      # For a Flathub submission, replace this with a tagged git source:
+      #   - type: git
+      #     url: https://github.com/jirkacepelka/ZimaOS-on-Linux.git
+      #     tag: v0.1.0
+      - type: dir
+        path: ../..

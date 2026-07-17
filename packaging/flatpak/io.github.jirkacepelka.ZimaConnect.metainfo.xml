@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.jirkacepelka.ZimaConnect</id>
+
+  <name>Zima Connect</name>
+  <summary>Securely reach your ZimaOS server over ZeroTier</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <developer id="io.github.jirkacepelka">
+    <name>Jirka Cepelka</name>
+  </developer>
+
+  <description>
+    <p>
+      Zima Connect is a lightweight companion for your ZimaOS home server. It
+      brings your device into a private ZeroTier network so you can reach it
+      from anywhere, then opens the ZimaOS login page for you.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Enter your Remote ID (the ZeroTier network ID shown in ZimaOS under Network → Remote Login)</li>
+      <li>Runs quietly in the background and reconnects automatically at login</li>
+      <li>Opens straight to the ZimaOS login once the connection is live</li>
+      <li>Simple localhost web interface — no accounts, no cloud middleman</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.jirkacepelka.ZimaConnect.desktop</launchable>
+
+  <categories>
+    <category>Network</category>
+    <category>RemoteAccess</category>
+  </categories>
+
+  <url type="homepage">https://github.com/jirkacepelka/ZimaOS-on-Linux</url>
+  <url type="bugtracker">https://github.com/jirkacepelka/ZimaOS-on-Linux/issues</url>
+  <url type="vcs-browser">https://github.com/jirkacepelka/ZimaOS-on-Linux</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Enter your Remote ID and connect</caption>
+      <image>https://raw.githubusercontent.com/jirkacepelka/ZimaOS-on-Linux/main/packaging/flatpak/screenshots/main.png</image>
+    </screenshot>
+  </screenshots>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.1.0" date="2026-07-17">
+      <description>
+        <p>First public release: connect to ZimaOS over ZeroTier, autostart at login, and open the ZimaOS login automatically.</p>
+      </description>
+    </release>
+  </releases>
+</component>

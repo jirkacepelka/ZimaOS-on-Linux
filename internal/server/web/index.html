@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zima Connect</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="card">
+    <header>
+      <div class="logo" aria-hidden="true">◈</div>
+      <h1>Zima Connect</h1>
+      <p class="subtitle">Securely reach your ZimaOS server from anywhere.</p>
+    </header>
+
+    <section id="status" class="status status-stopped">
+      <span class="dot"></span>
+      <span id="status-text">Not connected</span>
+    </section>
+
+    <form id="connect-form" autocomplete="off">
+      <label for="network-id">Remote ID
+        <span class="hint">ZimaOS &rarr; Network &rarr; Remote Login</span>
+      </label>
+      <input id="network-id" name="network-id" type="text" inputmode="latin"
+             placeholder="e.g. 8056c2e21c000001" spellcheck="false" />
+
+      <details class="advanced">
+        <summary>Advanced</summary>
+        <label for="zima-host">ZimaOS address (optional)
+          <span class="hint">Pin it to skip auto-discovery, e.g. 10.147.20.5</span>
+        </label>
+        <input id="zima-host" name="zima-host" type="text" spellcheck="false"
+               placeholder="auto-discover" />
+      </details>
+
+      <label class="checkbox">
+        <input id="autostart" name="autostart" type="checkbox" />
+        Start automatically when I log in
+      </label>
+
+      <div class="actions">
+        <button type="submit" id="connect-btn">Connect</button>
+        <button type="button" id="disconnect-btn" class="secondary" hidden>Disconnect</button>
+      </div>
+    </form>
+
+    <a id="open-zima" class="open-zima" hidden>Open ZimaOS &rarr;</a>
+
+    <p id="error" class="error" hidden></p>
+    <footer>
+      <span id="backend-name"></span>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
