@@ -13,10 +13,14 @@
 #       packaging/flatpak/io.github.jirkacepelka.ZimaConnect.yml
 #   flatpak run io.github.jirkacepelka.ZimaConnect
 #
-# NOTE ON ZEROTIER: the sandbox cannot run the host zerotier-one daemon. Full
-# Flathub distribution therefore requires the embedded libzt backend
-# (internal/zt/libzt.go). Until that is compiled in, this Flatpak runs the UI
-# and reports that no engine is available. See README "Distribution paths".
+# ZEROTIER: the sandbox cannot run the host zerotier-one daemon, so this build
+# embeds libzt (userspace ZeroTier) via the `libzt` build tag and links it
+# statically. The libzt module below is built from source with the same compat
+# flags verified during development (modern GCC needs an explicit <stdexcept>).
+#
+# STATUS: the Go side is compile- and link-verified against a source build of
+# libzt; this manifest wires that same build into flatpak-builder but has not
+# yet been run end-to-end through flatpak-builder itself. See README.
 
 app-id: io.github.jirkacepelka.ZimaConnect
 runtime: org.freedesktop.Platform
@@ -33,18 +37,40 @@ finish-args:
   - --talk-name=org.freedesktop.portal.Background
   # Opening the ZimaOS login in the user's browser goes through the OpenURI portal.
 
-build-options:
-  append-path: /usr/lib/sdk/golang/bin
-  env:
-    GOPROXY: 'off'
-    GO111MODULE: 'on'
-    GOFLAGS: '-mod=mod'
-
 modules:
-  - name: zima-connect
+  # -- Embedded userspace ZeroTier -------------------------------------------
+  - name: libzt
     buildsystem: simple
     build-commands:
-      - go build -trimpath -ldflags="-s -w" -o /app/bin/zima-connect ./cmd/zima-connect
+      # Modern GCC needs the explicit includes below (upstream prometheus-cpp
+      # and ZeroTierOne omit them). Build only the static lib, then install the
+      # archive and the public header into /app.
+      - cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_FLAGS="-include stdexcept -include cstdint"
+      - cmake --build build --target zt-static -j $FLATPAK_BUILDER_N_JOBS
+      - install -Dm644 build/lib/libzt.a /app/lib/libzt.a
+      - install -Dm644 include/ZeroTierSockets.h /app/include/ZeroTierSockets.h
+    sources:
+      - type: git
+        url: https://github.com/zerotier/libzt.git
+        # Pin to a reviewed commit for reproducible Flathub builds.
+        branch: main
+        # flatpak-builder fetches submodules (lwip, ZeroTierOne, ...) for git sources.
+
+  # -- The app ---------------------------------------------------------------
+  - name: zima-connect
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/golang/bin
+      env:
+        GOPROXY: 'off'
+        GO111MODULE: 'on'
+        GOFLAGS: '-mod=mod'
+        CGO_ENABLED: '1'
+        CGO_CFLAGS: '-I/app/include'
+        CGO_LDFLAGS: '-L/app/lib -lzt -lstdc++ -lpthread -lm'
+    build-commands:
+      - go build -tags libzt -trimpath -ldflags="-s -w" -o /app/bin/zima-connect ./cmd/zima-connect
       - install -Dm644 packaging/flatpak/io.github.jirkacepelka.ZimaConnect.desktop
           /app/share/applications/io.github.jirkacepelka.ZimaConnect.desktop
       - install -Dm644 packaging/flatpak/io.github.jirkacepelka.ZimaConnect.metainfo.xml

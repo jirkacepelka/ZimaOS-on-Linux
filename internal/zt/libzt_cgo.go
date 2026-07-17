@@ -44,9 +44,11 @@ import (
 type libztBackend struct {
 	pinnedHost string
 
-	mu        sync.Mutex
+	startMu sync.Mutex // serialises node startup; NOT held during the online wait
+	started bool
+
+	mu        sync.Mutex // guards status/netID/proxyStop only
 	status    Status
-	started   bool
 	netID     uint64
 	proxyStop context.CancelFunc
 }
@@ -67,11 +69,14 @@ func (l *libztBackend) Status(context.Context) Status {
 	return l.status
 }
 
-// ensureStarted brings the libzt node online exactly once. The node identity is
-// persisted under storageDir so the device keeps a stable ZeroTier address.
-func (l *libztBackend) ensureStarted() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+// ensureStarted brings the libzt node online exactly once. It is serialised by
+// startMu but deliberately does NOT hold the status mutex during the online
+// wait, so Status() stays responsive and the wait can be cancelled via ctx.
+// The node identity is persisted under storageDir so the device keeps a stable
+// ZeroTier address across restarts.
+func (l *libztBackend) ensureStarted(ctx context.Context) error {
+	l.startMu.Lock()
+	defer l.startMu.Unlock()
 	if l.started {
 		return nil
 	}
@@ -89,9 +94,12 @@ func (l *libztBackend) ensureStarted() error {
 		return fmt.Errorf("zts_node_start: rc=%d", int(rc))
 	}
 
-	// Wait for the node to come online (bounded).
+	// Wait for the node to come online (bounded, cancellable).
 	deadline := time.Now().Add(30 * time.Second)
 	for C.zts_node_is_online() != 1 {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("libzt node did not come online in time")
 		}
@@ -101,22 +109,12 @@ func (l *libztBackend) ensureStarted() error {
 	return nil
 }
 
-func (l *libztBackend) Join(ctx context.Context, networkID string) error {
+// Join returns immediately; the potentially slow node startup and network join
+// happen on a background goroutine so login autostart never blocks.
+func (l *libztBackend) Join(_ context.Context, networkID string) error {
 	id, err := strconv.ParseUint(networkID, 16, 64)
 	if err != nil {
 		return fmt.Errorf("invalid network ID %q: %w", networkID, err)
-	}
-
-	l.setState(StateStarting, networkID, "", false, "starting ZeroTier engine")
-	if err := l.ensureStarted(); err != nil {
-		l.setError(err.Error())
-		return err
-	}
-
-	if rc := C.zts_net_join(C.uint64_t(id)); rc != C.ZTS_ERR_OK {
-		err := fmt.Errorf("zts_net_join: rc=%d", int(rc))
-		l.setError(err.Error())
-		return err
 	}
 
 	l.mu.Lock()
@@ -128,11 +126,26 @@ func (l *libztBackend) Join(ctx context.Context, networkID string) error {
 	l.proxyStop = cancel
 	l.mu.Unlock()
 
+	l.setState(StateStarting, networkID, "", false, "starting ZeroTier engine")
+	go l.bringUp(monCtx, id, networkID)
+	return nil
+}
+
+// bringUp starts the node, joins the network, and then monitors for readiness.
+func (l *libztBackend) bringUp(ctx context.Context, id uint64, networkID string) {
+	if err := l.ensureStarted(ctx); err != nil {
+		if ctx.Err() == nil {
+			l.setError(err.Error())
+		}
+		return
+	}
+	if rc := C.zts_net_join(C.uint64_t(id)); rc != C.ZTS_ERR_OK {
+		l.setError(fmt.Sprintf("zts_net_join: rc=%d", int(rc)))
+		return
+	}
 	l.setState(StateJoining, networkID, "", false,
 		"waiting for authorization — approve this device in ZimaOS (Network → Remote Login)")
-
-	go l.monitor(monCtx, id, networkID)
-	return nil
+	l.monitor(ctx, id, networkID)
 }
 
 // monitor waits for the network transport to become ready, then starts a local

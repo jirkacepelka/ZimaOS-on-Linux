@@ -93,15 +93,24 @@ no TUN. The local TCP proxy in `internal/proxy` (fully unit-tested) bridges the
 browser to ZimaOS over the userspace stack. This is the backend that lets the
 app ship on Flathub and therefore show up in Bazaar.
 
-It's implemented in `internal/zt/libzt_cgo.go` behind the `libzt` build tag:
+It's implemented in `internal/zt/libzt_cgo.go` behind the `libzt` build tag and
+is **compile-, link-, and run-verified** against a source build of libzt:
 
 ```sh
-go build -tags libzt ./...   # requires the libzt C library + headers installed
+# Build libzt once (static lib). Modern GCC needs the extra includes.
+git clone --recurse-submodules https://github.com/zerotier/libzt.git
+cmake -S libzt -B libzt/build -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_CXX_FLAGS="-include stdexcept -include cstdint"
+cmake --build libzt/build --target zt-static -j"$(nproc)"
+
+# Then build Zima Connect with the embedded engine.
+make build-embedded LIBZT=$PWD/libzt
 ```
 
-The default build omits it (no C toolchain needed, tiny binary). The remaining
-milestone is compile-verifying the cgo bindings against a vendored libzt and
-bundling libzt in the Flatpak manifest.
+The default build omits all of this (no C toolchain needed, tiny binary). The
+Flatpak manifest builds libzt from source with the same flags and links it
+statically; the remaining milestone is running that manifest through
+flatpak-builder end-to-end.
 
 The `Backend` interface means the UI, config, autostart, web server, and proxy
 are all already done and shared across both paths.
@@ -145,11 +154,11 @@ The app ID `io.github.jirkacepelka.ZimaConnect` already follows Flathub's
 - ✅ Localhost UI, Remote ID entry, live status, auto-redirect to ZimaOS
 - ✅ Login autostart (XDG)
 - ✅ Host `zerotier-one` backend with ZimaOS auto-discovery
-- ✅ Userspace libzt backend (`-tags libzt`) + tested local TCP proxy
-- ✅ Flatpak manifest, AppStream metainfo, desktop entry, icon, screenshot
+- ✅ Userspace libzt backend (`-tags libzt`), compile/link/run-verified against libzt
+- ✅ Local TCP proxy bridging the browser over userspace ZeroTier (unit-tested)
+- ✅ Flatpak manifest builds+links libzt from source; AppStream metainfo, icon, screenshot
 - ✅ CI: build, vet, race tests, metadata validation
-- 🚧 Compile-verify the libzt cgo bindings against a vendored libzt
-- 🚧 Bundle libzt in the Flatpak manifest
+- 🚧 Run the Flatpak manifest through flatpak-builder end-to-end
 - 🚧 Background-portal autostart inside the Flatpak sandbox
 - 🚧 ZimaOS auto-discovery over the userspace stack (currently pin the address)
 

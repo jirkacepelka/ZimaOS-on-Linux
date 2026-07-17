@@ -5,9 +5,18 @@ MANIFEST := packaging/flatpak/$(APPID).yml
 
 .PHONY: build run test fmt vet clean install flatpak flatpak-run
 
-build: ## Build the binary into ./dist
+build: ## Build the default binary (host zerotier-one backend) into ./dist
 	@mkdir -p dist
 	go build -trimpath -ldflags="-s -w" -o dist/$(APP) ./cmd/$(APP)
+
+# Point LIBZT at a built libzt checkout (containing include/ and build/lib/libzt.a).
+LIBZT ?= /path/to/libzt
+build-embedded: ## Build with the embedded userspace libzt engine (needs LIBZT=...)
+	@mkdir -p dist
+	CGO_ENABLED=1 \
+	CGO_CFLAGS="-I$(LIBZT)/include" \
+	CGO_LDFLAGS="-L$(LIBZT)/build/lib -lzt -lstdc++ -lpthread -lm" \
+	go build -tags libzt -trimpath -ldflags="-s -w" -o dist/$(APP)-libzt ./cmd/$(APP)
 
 run: ## Build and run in the foreground (opens the browser)
 	go run ./cmd/$(APP)
