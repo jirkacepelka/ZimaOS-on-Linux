@@ -1,29 +1,32 @@
-:root {
-  --bg: #f4f5f7;
-  --card: #ffffff;
-  --fg: #1b1d21;
-  --muted: #6b7280;
-  --border: #e3e5e9;
-  --accent: #2f6df6;
-  --accent-fg: #ffffff;
-  --ok: #1faa59;
-  --warn: #e0a100;
-  --err: #d64545;
-  --radius: 14px;
-}
+/* Zima Connect — ZimaOS-inspired look: a frosted-glass card floating over a
+   soft blue gradient wallpaper, so moving on to the real ZimaOS login feels
+   like one continuous flow. */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1115;
-    --card: #181b21;
-    --fg: #eceef2;
-    --muted: #9aa1ad;
-    --border: #2a2e37;
-    --accent: #4b82ff;
-  }
+:root {
+  --zima-blue: #2b8fff;
+  --zima-blue-2: #16b9ff;
+  --zima-accent-grad: linear-gradient(135deg, #2b8fff 0%, #16c7ff 100%);
+  --glass-bg: rgba(255, 255, 255, 0.10);
+  --glass-brd: rgba(255, 255, 255, 0.18);
+  --fg: #f3f7ff;
+  --muted: rgba(226, 236, 255, 0.66);
+  --field-bg: rgba(255, 255, 255, 0.08);
+  --field-brd: rgba(255, 255, 255, 0.16);
+  --ok: #2ee6a6;
+  --warn: #ffce4d;
+  --err: #ff6b6b;
+  --radius: 22px;
 }
 
 * { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+/* Base wallpaper lives on <html> so it always fills the whole canvas, no matter
+   the window height; .backdrop layers the coloured glows over the viewport. */
+html {
+  background: linear-gradient(160deg, #0b1836 0%, #0a1a3f 45%, #071129 100%);
+}
 
 body {
   margin: 0;
@@ -31,132 +34,199 @@ body {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: var(--bg);
   color: var(--fg);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ---- Wallpaper ---------------------------------------------------------- */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(1200px 700px at 78% -10%, #1f5cff 0%, transparent 55%),
+    radial-gradient(900px 600px at 12% 110%, #00c2ff 0%, transparent 55%),
+    linear-gradient(160deg, #0b1836 0%, #0a1a3f 45%, #071129 100%);
+}
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.5;
+}
+.blob-1 { width: 360px; height: 360px; top: -80px; left: -60px; background: #2b8fff; }
+.blob-2 { width: 300px; height: 300px; bottom: -70px; right: -40px; background: #16c7ff; }
+.blob-3 { width: 260px; height: 260px; top: 40%; left: 60%; background: #5b7bff; opacity: 0.32; }
+
+/* ---- Card --------------------------------------------------------------- */
+
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-brd);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  box-shadow: 0 24px 60px rgba(3, 12, 34, 0.55);
 }
 
 .card {
   width: 100%;
-  max-width: 420px;
-  background: var(--card);
-  border: 1px solid var(--border);
+  max-width: 400px;
   border-radius: var(--radius);
-  padding: 28px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+  padding: 30px 28px;
 }
 
 header { text-align: center; margin-bottom: 20px; }
+
 .logo {
-  font-size: 34px;
-  color: var(--accent);
-  line-height: 1;
+  width: 62px;
+  height: 62px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--zima-accent-grad);
+  box-shadow: 0 8px 24px rgba(43, 143, 255, 0.5);
 }
-h1 { font-size: 22px; margin: 8px 0 4px; }
+h1 { font-size: 22px; font-weight: 650; margin: 4px 0 5px; letter-spacing: .2px; }
 .subtitle { color: var(--muted); margin: 0; font-size: 13.5px; }
+
+/* ---- Status ------------------------------------------------------------- */
 
 .status {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: rgba(127, 127, 127, 0.08);
+  padding: 11px 15px;
+  border-radius: 14px;
+  background: var(--field-bg);
+  border: 1px solid var(--field-brd);
   margin-bottom: 18px;
   font-weight: 500;
+  font-size: 13.5px;
 }
 .status .dot {
-  width: 10px; height: 10px; border-radius: 50%;
+  width: 9px; height: 9px; border-radius: 50%;
   background: var(--muted);
   flex: none;
 }
-.status-connected .dot { background: var(--ok); box-shadow: 0 0 0 4px rgba(31,170,89,.18); }
+.status-connected .dot { background: var(--ok); box-shadow: 0 0 0 4px rgba(46,230,166,.2); }
 .status-joining .dot,
 .status-discovering .dot,
 .status-starting .dot { background: var(--warn); animation: pulse 1.2s infinite; }
 .status-error .dot { background: var(--err); }
-@keyframes pulse { 50% { opacity: .35; } }
+@keyframes pulse { 50% { opacity: .3; } }
+
+/* ---- Form --------------------------------------------------------------- */
 
 label {
   display: block;
   font-weight: 600;
-  margin: 14px 0 6px;
-  font-size: 13.5px;
+  margin: 14px 0 7px;
+  font-size: 13px;
 }
-label .hint { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+label .hint { display: block; font-weight: 400; color: var(--muted); font-size: 12px; margin-top: 2px; }
 
 input[type="text"] {
   width: 100%;
-  padding: 11px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: transparent;
+  padding: 12px 16px;
+  border: 1px solid var(--field-brd);
+  border-radius: 12px;
+  background: var(--field-bg);
   color: var(--fg);
   font: inherit;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  transition: border-color .15s, box-shadow .15s;
 }
+input[type="text"]::placeholder { color: rgba(226,236,255,0.4); }
 input[type="text"]:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(47,109,246,.2);
+  border-color: var(--zima-blue-2);
+  box-shadow: 0 0 0 3px rgba(43,143,255,.28);
 }
 
-.advanced { margin-top: 10px; }
-.advanced summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.advanced { margin-top: 12px; }
+.advanced summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  list-style: none;
+  user-select: none;
+}
+.advanced summary::-webkit-details-marker { display: none; }
+.advanced summary::before { content: "▸ "; }
+.advanced[open] summary::before { content: "▾ "; }
 
 .checkbox {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   font-weight: 400;
-  margin-top: 16px;
-}
-.checkbox input { width: auto; }
-
-.actions { display: flex; gap: 10px; margin-top: 20px; }
-button {
-  flex: 1;
-  padding: 12px;
-  border: none;
-  border-radius: 10px;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font: inherit;
-  font-weight: 600;
+  font-size: 13.5px;
+  margin-top: 18px;
   cursor: pointer;
 }
-button:hover { filter: brightness(1.05); }
-button:disabled { opacity: .55; cursor: default; }
-button.secondary {
-  background: transparent;
-  color: var(--fg);
-  border: 1px solid var(--border);
+.checkbox input { width: 17px; height: 17px; accent-color: var(--zima-blue); flex: none; }
+
+/* ---- Buttons ------------------------------------------------------------ */
+
+.actions { display: flex; gap: 10px; margin-top: 22px; }
+button {
+  flex: 1;
+  padding: 13px;
+  border: none;
+  border-radius: 13px;
+  background: var(--zima-accent-grad);
+  color: #fff;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(43,143,255,.35);
+  transition: transform .06s, filter .15s, box-shadow .15s;
 }
+button:hover { filter: brightness(1.07); }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: .55; cursor: default; box-shadow: none; filter: none; }
+button.secondary {
+  background: rgba(255,255,255,0.08);
+  color: var(--fg);
+  border: 1px solid var(--field-brd);
+  box-shadow: none;
+}
+button.secondary:hover { background: rgba(255,255,255,0.14); }
 
 .open-zima {
   display: block;
   text-align: center;
   margin-top: 16px;
-  padding: 12px;
-  border-radius: 10px;
-  background: var(--ok);
+  padding: 14px;
+  border-radius: 13px;
+  background: var(--zima-accent-grad);
   color: #fff;
   text-decoration: none;
-  font-weight: 600;
+  font-weight: 650;
+  box-shadow: 0 10px 26px rgba(43,143,255,.4);
 }
+.open-zima:hover { filter: brightness(1.07); }
 
 .error {
   margin-top: 16px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(214, 69, 69, .12);
-  color: var(--err);
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: rgba(255, 107, 107, .16);
+  border: 1px solid rgba(255,107,107,.35);
+  color: #ffd0d0;
   font-size: 13px;
 }
 
 footer {
-  margin-top: 20px;
+  margin-top: 22px;
   text-align: center;
-  color: var(--muted);
+  color: rgba(226,236,255,0.4);
   font-size: 11.5px;
+  letter-spacing: .3px;
+}
+
+@media (max-width: 460px) {
+  .card { padding: 26px 20px; }
 }
